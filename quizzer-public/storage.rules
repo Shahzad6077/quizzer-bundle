@@ -1,0 +1,51 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read;
+  		allow write: if false;
+    }
+    
+    match /audios {
+      // Anyone can view any audio file (no auth, publicly readable)
+      match /{allAudios=**} {
+        allow read;
+        allow write: if false;
+      }
+			
+      // Only an individual user can write to "their" audio
+      match /{userId}/audios/{audioId} {
+        allow write: if request.auth.uid == userId 
+                      && request.resource.size < 3 * 1024 * 1024
+                      && request.resource.contentType.matches('audio/.*');
+      }
+      
+    }
+    
+    match /images {
+      // Anyone can view any image (no auth, publicly readable)
+      match /{allImages=**} {
+        allow read;
+        allow write: if false;
+      }
+			
+      // Only an individual user can write to "their" images
+      match /{userId}/photos/{imageId} {
+        allow write: if request.auth.uid == userId 
+                      && request.resource.size < 2 * 1024 * 1024
+                      && request.resource.contentType.matches('image/.*');
+      }
+
+			// Only an individual user can write to "their" profilePhoto
+      // match /{userId}/profilePhoto.jpg {
+      //   allow write: if request.auth.uid == imageId;
+      // }
+      
+      // // Only an individual user can write to "their" profileBackground
+      // match /{userId}/profileBackground.jpg {
+      //   allow write: if request.auth.uid == imageId;
+      // }
+      
+    }
+  }
+}

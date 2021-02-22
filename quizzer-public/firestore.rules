@@ -1,0 +1,143 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    match /Settings/{settingsId} {
+      allow get: if isAdmin() || 
+                      settingsId in ["Settings"]; //Publically viewable Settings
+      allow list: if false;	
+      
+      allow create,update: if isSignedIn() && isAdmin();
+      allow delete: if false;
+    }
+    
+    match /Misc/{docId} {
+      allow get: if isAdmin() || isPublicContent();
+      allow list: if false;	
+      
+      allow create,update: if isSignedIn();
+      allow delete: if isSignedIn() && isAdmin();
+    }
+    
+    match /Users/{userId} {
+      allow get: if isSignedIn() && 
+      									( isAdmin() || isHimself(userId) );
+      allow list: if isSignedIn() && 
+      									isAdmin()
+      
+      allow create: if isSignedIn() && 
+      									isHimself(userId) &&
+                  			( incomingData().role in ["teacher", "student"] || 
+                          ( incomingData().role == "admin" && settingsDocNotExists("Settings") ) //For Creating Initial User admin User
+                        )
+      					
+      allow update: if isSignedIn() && 
+      									( isAdmin() || isHimself(userId) ) &&
+      									notUpdating("role")
+                        
+      allow delete: if false;
+    }
+    
+    match /Quizzes/{quizId} {
+      allow get: if true; // updated for quick development
+      allow list: if (isPublicContent() && isNotDeleted()) ||
+      								(resourceMatchesAuthorId() && isNotDeleted()) ||
+      										isAdmin();
+      
+      allow create: if isSignedIn() && requestMatchesAuthorId();
+      
+      // we'll make more chages to update, and make it more secure
+      allow update: if isSignedIn() &&
+                        ( isAdmin() || 
+                          ( notUpdating("id") && notUpdating("name") && notUpdating("questions") && notUpdating("author") && notUpdating("authorId") && notUpdating("coverPhoto") && notUpdating("dateCreated") && notUpdating("options") && notUpdating("details") )
+                        );
+                        
+      allow delete: if isSignedIn() && isAdmin() && resourceMatchesAuthorId();
+    }
+    
+    match /QuizPlayed/{quizPlayedId} {
+      allow get: if false;
+      allow list: if isSignedIn() &&
+      									( isAdmin() || resourceMatchesPlayerId() );
+      
+      allow create: if isSignedIn() && requestMatchesPlayerId();
+      allow update: if isSignedIn() &&
+      									( isAdmin() || resourceMatchesPlayerId() );
+      allow delete: if false;
+    }
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function settingsDocNotExists(docId) {
+      return !exists(/databases/$(database)/documents/Settings/$(docId));
+    }
+
+    // function emailVerified() {
+    //   return request.auth.token.email_verified;
+    // }
+    
+    // function userExists() {
+    //   return exists(/databases/$(database)/documents/Users/$(request.auth.uid));
+    // }
+    
+    // function userEmail(userId) {
+    //   return get(/databases/$(database)/documents/Users/$(userId)).data.email;
+    // }
+    
+    function isAdmin() {
+      return get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == "admin";
+    }
+    
+    // function isAdminOrTeacher() {
+    //   return get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role in ["admin", "teacher"];
+    // }
+    
+    function isHimself(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // [READ] Data that exists on the Firestore document
+    function existingData() {
+      return resource.data;
+    }
+    // [WRITE] Data that is sent to a Firestore document
+    function incomingData() {
+      return request.resource.data;
+    }
+    
+    function requestMatchesAuthorId() {
+        return request.auth.uid == request.resource.data.authorId;
+    }
+
+    function resourceMatchesAuthorId() {
+        return request.auth.uid == resource.data.authorId;
+    }
+    
+    function requestMatchesPlayerId() {
+        return request.auth.uid == request.resource.data.playerId;
+    }
+    
+    function resourceMatchesPlayerId() {
+        return request.auth.uid == resource.data.playerId;
+    }
+    
+    function notUpdating(field) {
+    	return !(field in request.resource.data) || (field in resource.data && resource.data[field] == request.resource.data[field]);
+		}
+    
+    function isNotDeleted() {
+    	return existingData().isDeleted != true;
+		}
+    
+    function isPublicContent() {
+    	return existingData().visibility != "private";
+		}
+    
+  }
+}
